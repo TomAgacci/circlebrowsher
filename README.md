@@ -2,7 +2,7 @@ CIRCLE BROWSER
 
 Terminal Browser SH Script.
 
-Licensed Under Creative Commons Attribution Non-Commercial
+Licensed Under Creative Commons Attribution
 
 [Instructions]
 
