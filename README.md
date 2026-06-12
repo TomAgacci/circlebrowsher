@@ -1,10 +1,4 @@
-CCCCC  I  RRRR  L     CCCCC  EEEEE
-C      I  R  R  L     C      E
-C      I  RR    L     C      EE
-C      I  R R   L     C      E
-CCCCC  I  R  R  LLLLL CCCCC  EEEEE
-
-BROWSER
+CIRCLE BROWSER
 
 Terminal Browser SH Script.
 
