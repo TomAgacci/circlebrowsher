@@ -6,12 +6,15 @@ Licensed Under Creative Commons Attribution Non-Commercial
 
 [Instructions]
 
-Circle Browser
-sudo su
-password
-chmod +x zero-circle-browser.sh
-type exit
-./zero-circle-browser.sh test.html
+    Circle Browser
+    sudo su
+    password
+
+    chmod +x zero-circle-browser.sh
+
+    type exit
+
+    ./zero-circle-browser.sh test.html
 
 
 Lynx
