@@ -1,0 +1,110 @@
+#!/usr/bin/env php
+<?php
+//
+// zc_engine.php
+// Zero‑Circle Engine — PHP Simulation Backend
+// Drop‑in replacement for the compiled C engine
+// Called by zero-circle-browser.sh as:
+//
+//   ZC_URL="..." ZC_MODE="braille" php zc_engine.php file.html
+//
+
+// -------------------------------
+// Pulse + ZeroCircle primitives
+// -------------------------------
+
+class Pulse {
+    public float $base = 0.0;
+    public float $amp  = 1.0;
+    public float $freq = 1.0;
+    public float $phase = 0.0;
+
+    function sample(float $t): float {
+        return $this->base + $this->amp * sin($this->freq * $t + $this->phase);
+    }
+}
+
+class ZeroCircle {
+    public float $phase = 0.0;
+    public float $energy = 1.0;
+}
+
+// -------------------------------
+// Braille framebuffer
+// -------------------------------
+
+function braille(int $p0,int $p1,int $p2,int $p3,int $p4,int $p5,int $p6,int $p7): string {
+    $v = ($p0<<0)|($p1<<1)|($p2<<2)|($p3<<3)|($p4<<4)|($p5<<5)|($p6<<6)|($p7<<7);
+    return mb_chr(0x2800 + $v, 'UTF-8');
+}
+
+// -------------------------------
+// Scene loader (HTML → text)
+// -------------------------------
+
+function load_scene(string $path): string {
+    if (!file_exists($path)) {
+        fwrite(STDERR, "zc_engine.php: no such file: $path\n");
+        exit(1);
+    }
+    return file_get_contents($path);
+}
+
+// -------------------------------
+// Render frame
+// -------------------------------
+
+function render_frame(int $w, int $h, float $time, string $mode): void {
+    $zc = new ZeroCircle();
+    $pulse = new Pulse();
+    $pulse->base = 0.2;
+    $pulse->amp  = 0.8;
+    $pulse->freq = 1.3;
+
+    for ($y=0; $y<$h; $y+=4) {
+        $line = "";
+        for ($x=0; $x<$w; $x+=2) {
+
+            $px = $x / $w;
+            $py = $y / $h;
+
+            $phase = $zc->phase + $time + ($px * 2.0) + ($py * 3.0);
+            $brightness = $pulse->sample($phase);
+
+            if ($mode === "block") {
+                // simple block mode
+                $line .= ($brightness > 0.5) ? "█" : " ";
+                continue;
+            }
+
+            // braille mode
+            $p = [];
+            for ($i=0; $i<8; $i++) {
+                $p[$i] = ($brightness + sin($phase + $i*0.3)) > 0.5 ? 1 : 0;
+            }
+
+            $line .= braille(
+                $p[0],$p[1],$p[2],$p[3],
+                $p[4],$p[5],$p[6],$p[7]
+            );
+        }
+        echo $line . "\n";
+    }
+}
+
+// -------------------------------
+// Main
+// -------------------------------
+
+if ($argc < 2) {
+    fwrite(STDERR, "Usage: php zc_engine.php file.html\n");
+    exit(1);
+}
+
+$path = $argv[1];
+$html = load_scene($path);
+
+$mode = getenv("ZC_MODE") ?: "braille";
+$time = microtime(true) % 10000;
+
+render_frame(160, 80, $time, $mode);
