@@ -1,0 +1,103 @@
+// zc_compile.js
+function compileZCV(source, OP) {
+  const out = [];
+
+  const emitPush = v => {
+    out.push(OP.PUSH, v);
+  };
+
+  const words = {
+    SETMAT: (args) => {
+      emitPush(parseInt(args[0]));
+      out.push(OP.SETMAT);
+    },
+    RECT: (args) => {
+      // x y w h  (material comes from ctx.material)
+      emitPush(parseFloat(args[0]));
+      emitPush(parseFloat(args[1]));
+      emitPush(parseFloat(args[2]));
+      emitPush(parseFloat(args[3]));
+      // material is on ctx, not stack; we still want a mat arg:
+      emitPush(0); // placeholder, ctx.material used in draw
+      out.push(OP.RECT);
+    },
+    LINE: (args) => {
+      emitPush(parseFloat(args[0]));
+      emitPush(parseFloat(args[1]));
+      emitPush(parseFloat(args[2]));
+      emitPush(parseFloat(args[3]));
+      emitPush(0);
+      out.push(OP.LINE);
+    },
+    POLY: (args) => {
+      // we assume args: x0 y0 x1 y1 ... xn yn n
+      const n = parseInt(args[args.length - 1], 10);
+      for (let i = 0; i < 2 * n; i++) {
+        emitPush(parseFloat(args[i]));
+      }
+      emitPush(0); // material placeholder
+      emitPush(n);
+      out.push(OP.POLY);
+    },
+    FILL: (args) => {
+      emitPush(parseFloat(args[0]));
+      emitPush(parseFloat(args[1]));
+      emitPush(0);
+      out.push(OP.FILL);
+    },
+    PULSE: () => out.push(OP.PULSE),
+    ROT: (args) => {
+      // x y z angle
+      emitPush(parseFloat(args[0]));
+      emitPush(parseFloat(args[1]));
+      emitPush(parseFloat(args[2]));
+      emitPush(parseFloat(args[3]));
+      out.push(OP.ROT);
+    },
+    ZC: () => out.push(OP.ZC),
+    OSC: (args) => {
+      emitPush(parseFloat(args[0])); // freq
+      emitPush(parseFloat(args[1])); // t
+      out.push(OP.OSC);
+    },
+    MOD: (args) => {
+      emitPush(parseFloat(args[0]));
+      emitPush(parseFloat(args[1]));
+      out.push(OP.MOD);
+    },
+    GRAD: () => out.push(OP.GRAD),
+    SHADE: () => out.push(OP.SHADE),
+    BLEND: () => out.push(OP.BLEND),
+    PUSH: (args) => emitPush(parseFloat(args[0])),
+    ADD: () => out.push(OP.ADD),
+    SUB: () => out.push(OP.SUB),
+    MUL: () => out.push(OP.MUL),
+    DIV: () => out.push(OP.DIV),
+    DUP: () => out.push(OP.DUP),
+    SWAP: () => out.push(OP.SWAP),
+    DROP: () => out.push(OP.DROP),
+    PRINT: () => out.push(OP.PRINT),
+    HALT: () => out.push(OP.HALT)
+  };
+
+  const lines = source.split(/\r?\n/);
+  for (let line of lines) {
+    line = line.replace(/#.*/, "").trim();
+    if (!line) continue;
+    const parts = line.split(/\s+/);
+    const op = parts[0].toUpperCase();
+    const args = parts.slice(1);
+    const fn = words[op];
+    if (!fn) throw new Error("Unknown word: " + op);
+    fn(args);
+  }
+
+  return out;
+}
+
+// export for browser/node
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = { compileZCV };
+} else {
+  window.ZCCompile = { compileZCV };
+}
