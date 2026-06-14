@@ -20,4 +20,4 @@ Licensed Under Creative Commons Attribution Non-Commercial
 Lynx
 chmod +x nano64-html4.sh
 
-./nano64-html4.sh test.html
+./lynxbrowsher.sh test.html
