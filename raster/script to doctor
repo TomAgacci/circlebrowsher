@@ -1,0 +1,165 @@
+#!/bin/sh
+# gamma_tile_raster.sh
+# POSIX sh + ImageMagick `convert`
+# Gamma-quantized color engine (nano-64 style), 1x1 cells (can be extended to 16x16 tiles).
+
+die() {
+    echo "error: $*" >&2
+    exit 1
+}
+
+need() {
+    command -v "$1" >/dev/null 2>&1 || die "missing dependency: $1"
+}
+
+[ $# -lt 1 ] && die "usage: $0 image.jpg"
+
+IMG="$1"
+
+need convert
+
+# Get terminal size (fallbacks)
+if command -v tput >/dev/null 2>&1; then
+    COLS=$(tput cols 2>/dev/null || echo 80)
+    ROWS=$(tput lines 2>/dev/null || echo 24)
+else
+    COLS=80
+    ROWS=24
+fi
+
+# Resize image to terminal grid (1 pixel per cell here).
+# To make 16x16 tiles, you’d resize to (COLS*16)x(ROWS*16) and average per tile.
+convert "$IMG" -resize "${COLS}x${ROWS}!" txt:- 2>/dev/null | {
+    # Skip header
+    read _ || exit 1
+
+    # nano-64 gamma LUT (0..63 -> 0..255), coarse example
+    gamma64() {
+        idx=$1
+        # clamp
+        if [ "$idx" -lt 0 ]; then idx=0; fi
+        if [ "$idx" -gt 63 ]; then idx=63; fi
+        case "$idx" in
+            0)  echo 0   ;;
+            1)  echo 1   ;;
+            2)  echo 2   ;;
+            3)  echo 3   ;;
+            4)  echo 4   ;;
+            5)  echo 5   ;;
+            6)  echo 6   ;;
+            7)  echo 7   ;;
+            8)  echo 9   ;;
+            9)  echo 11  ;;
+            10) echo 13  ;;
+            11) echo 15  ;;
+            12) echo 18  ;;
+            13) echo 21  ;;
+            14) echo 24  ;;
+            15) echo 28  ;;
+            16) echo 32  ;;
+            17) echo 36  ;;
+            18) echo 41  ;;
+            19) echo 46  ;;
+            20) echo 52  ;;
+            21) echo 58  ;;
+            22) echo 64  ;;
+            23) echo 71  ;;
+            24) echo 78  ;;
+            25) echo 86  ;;
+            26) echo 94  ;;
+            27) echo 103 ;;
+            28) echo 112 ;;
+            29) echo 122 ;;
+            30) echo 132 ;;
+            31) echo 143 ;;
+            32) echo 154 ;;
+            33) echo 166 ;;
+            34) echo 178 ;;
+            35) echo 191 ;;
+            36) echo 204 ;;
+            37) echo 218 ;;
+            38) echo 232 ;;
+            39) echo 247 ;;
+            40) echo 255 ;;
+            41) echo 255 ;;
+            42) echo 255 ;;
+            43) echo 255 ;;
+            44) echo 255 ;;
+            45) echo 255 ;;
+            46) echo 255 ;;
+            47) echo 255 ;;
+            48) echo 255 ;;
+            49) echo 255 ;;
+            50) echo 255 ;;
+            51) echo 255 ;;
+            52) echo 255 ;;
+            53) echo 255 ;;
+            54) echo 255 ;;
+            55) echo 255 ;;
+            56) echo 255 ;;
+            57) echo 255 ;;
+            58) echo 255 ;;
+            59) echo 255 ;;
+            60) echo 255 ;;
+            61) echo 255 ;;
+            62) echo 255 ;;
+            63) echo 255 ;;
+        esac
+    }
+
+    # Map gamma RGB -> ANSI 256 color (simple 6x6x6 cube)
+    rgb_to_ansi() {
+        R=$1 G=$2 B=$3
+        r6=$((R * 5 / 255))
+        g6=$((G * 5 / 255))
+        b6=$((B * 5 / 255))
+        echo $((16 + 36*r6 + 6*g6 + b6))
+    }
+
+    current_y=-1
+
+    while IFS= read -r line; do
+        # strip leading space
+        case "$line" in
+            ' '*) line=${line# } ;;
+        esac
+
+        xy=${line%%:*}
+        rest=${line#*:}
+
+        x=${xy%%,*}
+        y=${xy#*,}
+
+        # new row?
+        if [ "$y" -ne "$current_y" ]; then
+            if [ "$current_y" -ne -1 ]; then
+                printf '\033[0m\n'
+            fi
+            current_y=$y
+        fi
+
+        rest=${rest#' '}
+        rgb=${rest%%)*}
+        rgb=${rgb#'('}
+
+        r=${rgb%%,*}
+        tmp=${rgb#*,}
+        g=${tmp%%,*}
+        b=${tmp##*,}
+
+        # nano-64 index per channel: 0..63
+        idxR=$((r * 63 / 255))
+        idxG=$((g * 63 / 255))
+        idxB=$((b * 63 / 255))
+
+        Rg=$(gamma64 "$idxR")
+        Gg=$(gamma64 "$idxG")
+        Bg=$(gamma64 "$idxB")
+
+        color=$(rgb_to_ansi "$Rg" "$Gg" "$Bg")
+
+        printf '\033[38;5;%sm█' "$color"
+    done
+
+    printf '\033[0m\n'
+}
