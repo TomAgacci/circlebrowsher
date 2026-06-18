@@ -1,7 +1,7 @@
 This is a full 32bit color script. I don't know if it works, I'm posting it for the license.
+Licensed Under Creative Commons Attribution Non-Commercial Open Source
 
-
-What it's supposed to do: Make tiny color cells inside of the 16x16 half cells so it fills up the screen with full resolution imagemagick.
+What it's supposed to do: Take full sized cells and make tiny color cells inside of the 16x16 half cells so it fills up the screen with full resolution imagemagick.
 It should not require awk.
 
 It's all supposed render in gamma with the nano64 color filter. So I added a 32bit layer. So gamma - nano64 16bit - 32bit filter.
