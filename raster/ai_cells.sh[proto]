@@ -1,0 +1,166 @@
+#!/bin/sh
+# ai_cells.sh
+# Convert ImageMagick txt:- pixel dump → DRAW commands using half‑cell rastering.
+# Each terminal cell = 2 vertical square halves (▀ top, ▄ bottom).
+
+die () { echo "error: $*" >&2; exit 1; }
+
+[ $# -lt 1 ] && die "usage: ai_cells.sh txtfile"
+
+TXT="$1"
+
+# Terminal geometry
+if command -v tput >/dev/null 2>&1; then
+    COLS=$(tput cols 2>/dev/null || echo 80)
+    ROWS=$(tput lines 2>/dev/null || echo 24)
+else
+    COLS=80
+    ROWS=24
+fi
+
+# Half‑cell model:
+# Each terminal row = 2 image rows
+# Effective raster height = ROWS * 2
+RASTER_W="$COLS"
+RASTER_H=$((ROWS * 2))
+
+# Parse ImageMagick txt:- header to get image size
+# First non-comment line looks like: "0,0: (R,G,B) ..."
+read firstline < "$TXT"
+case "$firstline" in
+    \#*) read firstline < "$TXT" ;;
+esac
+
+# Extract max X,Y by scanning file
+MAXX=0
+MAXY=0
+while IFS= read -r line; do
+    case "$line" in
+        \#*) continue ;;
+    esac
+    xy=${line%%:*}
+    x=${xy%%,*}
+    y=${xy#*,}
+    [ "$x" -gt "$MAXX" ] && MAXX="$x"
+    [ "$y" -gt "$MAXY" ] && MAXY="$y"
+done < "$TXT"
+
+IMG_W=$((MAXX + 1))
+IMG_H=$((MAXY + 1))
+
+# Compute scale factor so image fits into half‑cell raster
+# s = min(COLS / IMG_W, (ROWS*2) / IMG_H)
+s1=$(awk "BEGIN{print $RASTER_W / $IMG_W}")
+s2=$(awk "BEGIN{print $RASTER_H / $IMG_H}")
+s=$(awk "BEGIN{print ($s1 < $s2) ? $s1 : $s2}")
+
+# Scaled image size
+SCALED_W=$(awk "BEGIN{print int($IMG_W * $s)}")
+SCALED_H=$(awk "BEGIN{print int($IMG_H * $s)}")
+
+# Mapping formula:
+# For each terminal cell (cx, cy):
+#   top pixel = (cx, 2*cy)
+#   bot pixel = (cx, 2*cy+1)
+#
+# Pixel coordinate in original image:
+#   px = floor(cx / s)
+#   py = floor((2*cy) / s), floor((2*cy+1) / s)
+
+# Read txt:- into arrays
+# Arrays: R_px_py, G_px_py, B_px_py
+# Using eval for dynamic variable names
+load_pixels () {
+    while IFS= read -r line; do
+        case "$line" in
+            \#*) continue ;;
+        esac
+        xy=${line%%:*}
+        rest=${line#*:}
+
+        x=${xy%%,*}
+        y=${xy#*,}
+
+        rgb=${rest#*rgb(}
+        rgb=${rgb%%)*}
+
+        R=${rgb%%,*}
+        tmp=${rgb#*,}
+        G=${tmp%%,*}
+        B=${tmp#*,}
+
+        R=${R%.*}; G=${G%.*}; B=${B%.*}
+
+        eval "R_${x}_${y}=$R"
+        eval "G_${x}_${y}=$G"
+        eval "B_${x}_${y}=$B"
+    done < "$TXT"
+}
+
+load_pixels
+
+# AI cell generator (proto):
+# Given two pixels (top/bottom), choose half‑cell glyph:
+#   both bright → █
+#   top bright → ▀
+#   bottom bright → ▄
+#   neither → space
+#
+# You can replace this with your quantitative AI engine.
+
+choose_glyph () {
+    topR=$1; topG=$2; topB=$3
+    botR=$4; botG=$5; botB=$6
+
+    # brightness heuristic
+    topY=$(awk "BEGIN{print ($topR*0.299 + $topG*0.587 + $topB*0.114)}")
+    botY=$(awk "BEGIN{print ($botR*0.299 + $botG*0.587 + $botB*0.114)}")
+
+    top_on=$(awk "BEGIN{exit !($topY > 128)}")
+    bot_on=$(awk "BEGIN{exit !($botY > 128)}")
+
+    if [ "$top_on" -eq 0 ] && [ "$bot_on" -eq 0 ]; then
+        echo "ASCII( )"
+    elif [ "$top_on" -eq 0 ] && [ "$bot_on" -eq 1 ]; then
+        echo "ASCII(▄)"
+    elif [ "$top_on" -eq 1 ] && [ "$bot_on" -eq 0 ]; then
+        echo "ASCII(▀)"
+    else
+        echo "ASCII(█)"
+    fi
+}
+
+# Emit DRAW commands
+cy=0
+while [ "$cy" -lt "$ROWS" ]; do
+    cx=0
+    while [ "$cx" -lt "$COLS" ]; do
+
+        # Map cell to scaled pixel coords
+        px=$(awk "BEGIN{print int($cx / $s)}")
+        py_top=$(awk "BEGIN{print int((2*$cy) / $s)}")
+        py_bot=$(awk "BEGIN{print int((2*$cy+1) / $s)}")
+
+        # Clamp
+        [ "$px" -ge "$IMG_W" ] && px=$((IMG_W-1))
+        [ "$py_top" -ge "$IMG_H" ] && py_top=$((IMG_H-1))
+        [ "$py_bot" -ge "$IMG_H" ] && py_bot=$((IMG_H-1))
+
+        # Fetch pixels
+        eval "tR=\$R_${px}_${py_top}"
+        eval "tG=\$G_${px}_${py_top}"
+        eval "tB=\$B_${px}_${py_top}"
+
+        eval "bR=\$R_${px}_${py_bot}"
+        eval "bG=\$G_${px}_${py_bot}"
+        eval "bB=\$B_${px}_${py_bot}"
+
+        glyph=$(choose_glyph "$tR" "$tG" "$tB" "$bR" "$bG" "$bB")
+
+        # Emit DRAW command (layer=1, z=0)
+        echo "DRAW $cx $cy 1 0 $glyph"
+
+        cx=$((cx+1))
+    done
+    cy=$((cy+1))
+done
