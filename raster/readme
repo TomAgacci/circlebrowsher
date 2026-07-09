@@ -5,3 +5,17 @@ What it's supposed to do: Take full sized cells and make tiny color cells inside
 It should not require awk.
 
 It's all supposed render in gamma with the nano64 color filter. So I added a 32bit layer. So gamma - nano64 16bit - 32bit filter.
+
+NEW 
+7/9/2026
+
+Command for ai_cells.sh
+convert image.jpg -resize WxH txt:-
+
+How it fits into the pipeline
+
+convert img.jpg -resize ... txt:- > pixels.txt
+ai_cells.sh pixels.txt > display.txt
+zc_validate < display.txt
+zc_raster_schema.sh display.txt
+zc_pulse_loop.sh display.txt
