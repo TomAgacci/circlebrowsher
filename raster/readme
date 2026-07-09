@@ -19,3 +19,5 @@ ai_cells.sh pixels.txt > display.txt
 zc_validate < display.txt
 zc_raster_schema.sh display.txt
 zc_pulse_loop.sh display.txt
+
+PULSE x y layer z t0 t1 curve glyphA glyphB
